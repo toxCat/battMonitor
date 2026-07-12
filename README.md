@@ -29,7 +29,8 @@ instead.
 ## Firmware
 
 `battMonitor.ino` is the main sketch, with calibration constants split out
-into `Config.h` and the state-of-charge curve in `BatteryCurve.{h,cpp}`.
+into `Config.h`, the state-of-charge curve in `BatteryCurve.{h,cpp}`, and the
+boot splash bitmap in `Splash.{h,cpp}`.
 
 Dependencies (install via the Arduino Library Manager):
 
@@ -52,23 +53,39 @@ finalized, and firmware behavior depends on them:
 - **`BATTERY_CELLS_SERIES`** — set to `1` if the two 18650s are wired in
   parallel (typical for these boost-converter UPS boards, single-cell voltage
   range ~3.0-4.2V) or `2` if wired in series.
-- **`BATTERY_CAPACITY_MAH`** — total pack capacity, used only for the
-  charge-time estimate.
 
 The state-of-charge percentage (to hundredths precision) comes from linear
 interpolation over a typical 1S Li-ion discharge curve in `BatteryCurve.cpp`;
 recalibrate that table against your actual cells if precision at low
 discharge rates matters.
 
-### Display layout (128x32)
+### ADC precision
 
-```
-12.34V  1.234A
-SOC 87.65%
-CHARGING ETA 1h23m   (or FULL / LOW BATTERY, blinking, when applicable)
-```
+Both analog channels are read with oversampling-and-decimation (Atmel AVR121):
+16 raw 10-bit samples are summed and shifted down to yield 2 extra effective
+bits (~1.22 mV/count at the pin), so the displayed voltage/current stay
+meaningful to the hundredths place even after divider scaling. Tune
+`ADC_EXTRA_BITS` in `Config.h` if you want more/less oversampling.
 
-Charge-time-remaining and the low-battery alarm are best-effort/low-priority
-features: the ETA is a simple linear estimate from present charge current and
-remaining capacity, and the low-battery text blinks once state of charge
-drops below `LOW_BATTERY_PERCENT` while not charging.
+### Display states
+
+The display is a small state machine, checked every `DISPLAY_UPDATE_MS`:
+
+| State | Condition                                              | Shows                                  |
+|-------|---------------------------------------------------------|-----------------------------------------|
+| 0 — Discharging  | not charging, not full, SOC ≥ `LOW_BATTERY_PERCENT` | Voltage, SOC%, current draw (3 lines)    |
+| 1 — Charging     | `PIN_CHARGING` HIGH and not full                     | SOC% (large) and "USB-C"                 |
+| 2 — Full/Charged | `PIN_CHARGE_FULL` HIGH                               | "CHARGED"                                 |
+| 3 — Low battery  | not charging, not full, SOC < `LOW_BATTERY_PERCENT`  | Blinking "LOW BATTERY"                    |
+
+State 2 (full) takes priority over state 1 (charging) if both pins are
+somehow HIGH at once; state 3 only applies while actually discharging.
+
+### Boot splash
+
+`Splash.cpp` draws a 128x32 1-bit bitmap for `SPLASH_DURATION_MS` at power-on.
+It currently ships as a blank placeholder (`kSplashBitmap`, all-zero, 512
+bytes) — generate your own art with a tool like
+[image2cpp](https://javl.github.io/image2cpp/) (128x32, "Horizontal - 1 bit
+per pixel" export mode matches `Adafruit_GFX::drawBitmap`'s layout) and drop
+the resulting byte array in.

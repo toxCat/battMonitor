@@ -22,11 +22,17 @@
 #define PIN_CHARGE_FULL     7   // HIGH once the UPS board reports full charge
 
 // ---------------------------------------------------------------------------
-// ADC
+// ADC oversampling
+// Standard oversample-and-decimate technique (Atmel AVR121): summing
+// 4^ADC_EXTRA_BITS raw 10-bit samples and shifting right by ADC_EXTRA_BITS
+// yields ADC_EXTRA_BITS additional effective bits of resolution. With 2 extra
+// bits that's 12-bit effective resolution, ~1.22 mV/count at the pin -- well
+// under a hundredth of a volt even after divider scaling.
 // ---------------------------------------------------------------------------
-#define ADC_REFERENCE_VOLTS   5.0
-#define ADC_MAX_COUNTS        1023.0
-#define ADC_OVERSAMPLE_COUNT  16   // averaged per reading to reduce noise
+#define ADC_REFERENCE_VOLTS     5.0
+#define ADC_EXTRA_BITS          2
+#define ADC_OVERSAMPLE_SAMPLES  (1UL << (2 * ADC_EXTRA_BITS))        // 16
+#define ADC_EFFECTIVE_COUNTS    (1024UL << ADC_EXTRA_BITS)           // 4096
 
 // ---------------------------------------------------------------------------
 // ACS709 current sensor calibration
@@ -52,11 +58,11 @@
 // series. The SOC curve is applied per-cell (Vbat / BATTERY_CELLS_SERIES).
 // ---------------------------------------------------------------------------
 #define BATTERY_CELLS_SERIES   1
-#define BATTERY_CAPACITY_MAH   6800   // total pack capacity, adjust to your cells
 
 // ---------------------------------------------------------------------------
 // Alarms / behavior
 // ---------------------------------------------------------------------------
-#define LOW_BATTERY_PERCENT     15.0
-#define CHARGE_CURRENT_MIN_A    0.02   // below this, ETA isn't estimated
+#define LOW_BATTERY_PERCENT     5.0
 #define DISPLAY_UPDATE_MS       500
+#define SPLASH_DURATION_MS      1500
+#define LOW_BATTERY_BLINK_MS    500

@@ -10,14 +10,23 @@
 //   - Adafruit BusIO (pulled in automatically as a dependency)
 
 #include <math.h>
+#include <string.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
 #include "Config.h"
 #include "BatteryCurve.h"
+#include "Splash.h"
 
 Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN);
+
+enum DisplayState : uint8_t {
+  STATE_DISCHARGING = 0,
+  STATE_CHARGING = 1,
+  STATE_FULL = 2,
+  STATE_LOW_BATTERY = 3,
+};
 
 void setup() {
   pinMode(PIN_CHARGING, INPUT);
@@ -30,19 +39,19 @@ void setup() {
       delay(1000);
     }
   }
-  display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-  display.display();
+  drawSplash();
 }
 
-// Averages several ADC samples to cut down on switching-noise jitter.
+// Oversamples and decimates ADC_OVERSAMPLE_SAMPLES raw readings to gain
+// ADC_EXTRA_BITS of effective resolution (see Config.h), returning volts.
 static float readAveragedVolts(uint8_t pin) {
   uint32_t sum = 0;
-  for (uint8_t i = 0; i < ADC_OVERSAMPLE_COUNT; i++) {
+  for (uint16_t i = 0; i < ADC_OVERSAMPLE_SAMPLES; i++) {
     sum += analogRead(pin);
   }
-  float counts = (float)sum / ADC_OVERSAMPLE_COUNT;
-  return counts * (ADC_REFERENCE_VOLTS / ADC_MAX_COUNTS);
+  uint32_t oversampled = sum >> ADC_EXTRA_BITS;
+  return (float)oversampled * (ADC_REFERENCE_VOLTS / (float)ADC_EFFECTIVE_COUNTS);
 }
 
 static float readBatteryVoltage() {
@@ -57,11 +66,72 @@ static float readCurrentAmps() {
   return (vOut - ACS709_ZERO_CURRENT_VOLTS) / ACS709_SENSITIVITY_V_PER_A;
 }
 
-// Formats whole minutes as "Hh MMm" into buf (must be at least 8 bytes).
-static void formatDuration(uint32_t minutes, char *buf) {
-  uint32_t hours = minutes / 60;
-  uint32_t mins = minutes % 60;
-  snprintf(buf, 8, "%luh%02lum", (unsigned long)hours, (unsigned long)mins);
+static DisplayState determineState(bool isCharging, bool isFull, float socPercent) {
+  if (isFull) {
+    return STATE_FULL;
+  }
+  if (isCharging) {
+    return STATE_CHARGING;
+  }
+  if (socPercent < LOW_BATTERY_PERCENT) {
+    return STATE_LOW_BATTERY;
+  }
+  return STATE_DISCHARGING;
+}
+
+// dtostrf (not snprintf's "%f") is used throughout since AVR's snprintf
+// doesn't format floats without pulling in libprintf_flt.
+static void formatValue(float value, uint8_t decimals, const char *suffix, char *outBuf, size_t outSize) {
+  char numBuf[12];
+  dtostrf(value, 1, decimals, numBuf);
+  snprintf(outBuf, outSize, "%s%s", numBuf, suffix);
+}
+
+static void printCentered(const char *text, int16_t y, uint8_t size) {
+  int16_t textWidth = (int16_t)strlen(text) * 6 * size;
+  int16_t x = (OLED_WIDTH - textWidth) / 2;
+  if (x < 0) {
+    x = 0;
+  }
+  display.setTextSize(size);
+  display.setCursor(x, y);
+  display.print(text);
+}
+
+static void renderDischarging(float voltage, float socPercent, float currentAmps) {
+  char buf[16];
+  display.setTextSize(1);
+
+  formatValue(voltage, 2, "V", buf, sizeof(buf));
+  display.setCursor(0, 0);
+  display.print(buf);
+
+  formatValue(socPercent, 2, "%", buf, sizeof(buf));
+  display.setCursor(0, 11);
+  display.print(buf);
+
+  formatValue(fabs(currentAmps), 3, "A", buf, sizeof(buf));
+  display.setCursor(0, 22);
+  display.print(buf);
+}
+
+static void renderCharging(float socPercent) {
+  char buf[16];
+  formatValue(socPercent, 2, "%", buf, sizeof(buf));
+  printCentered(buf, 0, 2);
+  printCentered("USB-C", 20, 1);
+}
+
+static void renderFull() {
+  printCentered("CHARGED", 8, 2);
+}
+
+static void renderLowBattery(bool blinkOn) {
+  if (!blinkOn) {
+    return;
+  }
+  printCentered("LOW", 0, 2);
+  printCentered("BATTERY", 16, 2);
 }
 
 void loop() {
@@ -71,41 +141,25 @@ void loop() {
 
   bool isCharging = digitalRead(PIN_CHARGING) == HIGH;
   bool isFull = digitalRead(PIN_CHARGE_FULL) == HIGH;
-  bool lowBattery = !isCharging && socPercent <= LOW_BATTERY_PERCENT;
-  bool blinkOn = (millis() / 500) % 2 == 0;
+  DisplayState state = determineState(isCharging, isFull, socPercent);
+  bool blinkOn = (millis() / LOW_BATTERY_BLINK_MS) % 2 == 0;
 
   display.clearDisplay();
-  display.setTextSize(1);
 
-  display.setCursor(0, 0);
-  display.print(batteryVoltage, 2);
-  display.print("V  ");
-  display.print(fabs(currentAmps), 3);
-  display.print("A");
-
-  display.setCursor(0, 11);
-  display.print("SOC ");
-  display.print(socPercent, 2);
-  display.print("%");
-
-  display.setCursor(0, 22);
-  if (isFull) {
-    display.print("FULL");
-  } else if (isCharging) {
-    display.print("CHARGING");
-    if (currentAmps < -CHARGE_CURRENT_MIN_A) {
-      float remainingMah = BATTERY_CAPACITY_MAH * (1.0 - socPercent / 100.0);
-      float chargeCurrentMa = -currentAmps * 1000.0;
-      uint32_t etaMinutes = (uint32_t)((remainingMah / chargeCurrentMa) * 60.0);
-      char etaBuf[8];
-      formatDuration(etaMinutes, etaBuf);
-      display.print(" ETA ");
-      display.print(etaBuf);
-    }
-  } else if (lowBattery) {
-    if (blinkOn) {
-      display.print("LOW BATTERY");
-    }
+  switch (state) {
+    case STATE_CHARGING:
+      renderCharging(socPercent);
+      break;
+    case STATE_FULL:
+      renderFull();
+      break;
+    case STATE_LOW_BATTERY:
+      renderLowBattery(blinkOn);
+      break;
+    case STATE_DISCHARGING:
+    default:
+      renderDischarging(batteryVoltage, socPercent, currentAmps);
+      break;
   }
 
   display.display();
