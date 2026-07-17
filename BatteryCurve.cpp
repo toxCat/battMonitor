@@ -7,13 +7,14 @@ struct CurvePoint {
 };
 
 // Descending by voltage. Approximate 1S Li-ion discharge curve at low/moderate
-// discharge rates.
+// discharge rates, with the tail pinned to this pack's actual full/empty
+// points: 4.20V full, 3.10V empty (the UPS board's low-voltage cutoff).
 static const CurvePoint kCurve[] = {
   {4.20, 100.0}, {4.15, 95.0},  {4.11, 90.0},  {4.08, 85.0},  {4.02, 80.0},
   {3.98, 75.0},  {3.95, 70.0},  {3.91, 65.0},  {3.87, 60.0},  {3.85, 55.0},
   {3.84, 50.0},  {3.82, 45.0},  {3.80, 40.0},  {3.79, 35.0},  {3.77, 30.0},
   {3.75, 25.0},  {3.73, 20.0},  {3.71, 15.0},  {3.69, 10.0},  {3.61, 5.0},
-  {3.27, 0.0},
+  {3.10, 0.0},
 };
 static const size_t kCurveLen = sizeof(kCurve) / sizeof(kCurve[0]);
 

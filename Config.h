@@ -46,16 +46,19 @@
 // ---------------------------------------------------------------------------
 // Battery voltage divider
 // Vbat = Vadc * VOLTAGE_DIVIDER_RATIO, ratio = (R1 + R2) / R2
-// (R1 = battery-side leg, R2 = ground-side leg). Placeholder until the
-// resistor pair is chosen -- update once the divider is built and measured.
+// (R1 = battery-side leg, R2 = ground-side leg). Measured divider: 33k top
+// (R1) / 100k bottom (R2) -> ratio = (33k + 100k) / 100k = 1.33. At the
+// pack's 4.2V full point that puts Vadc at ~3.16V, comfortably under the 5V
+// ADC reference.
 // ---------------------------------------------------------------------------
-#define VOLTAGE_DIVIDER_RATIO   2.0
+#define VOLTAGE_DIVIDER_RATIO   1.33
 
 // ---------------------------------------------------------------------------
 // Battery pack
-// BATTERY_CELLS_SERIES: 1 if the two 18650s are wired in parallel (typical for
-// these boost-converter UPS HATs, single-cell voltage range), 2 if wired in
-// series. The SOC curve is applied per-cell (Vbat / BATTERY_CELLS_SERIES).
+// Two 18650s wired in parallel (confirmed): single-cell voltage range, full
+// at 4.20V and empty at 3.10V (the UPS board's cutoff) -- see BatteryCurve.cpp.
+// BATTERY_CELLS_SERIES divides Vbat down to a per-cell voltage before it's
+// run through the SOC curve; set to 2 if the pack is ever rewired in series.
 // ---------------------------------------------------------------------------
 #define BATTERY_CELLS_SERIES   1
 

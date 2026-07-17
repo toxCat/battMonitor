@@ -38,26 +38,22 @@ Dependencies (install via the Arduino Library Manager):
 - Adafruit SSD1306
 - Adafruit BusIO (pulled in automatically)
 
-### Calibration still needed
+### Calibration
 
-A few values in `Config.h` are placeholders until the physical hardware is
-finalized, and firmware behavior depends on them:
-
-- **`VOLTAGE_DIVIDER_RATIO`** — set once the divider resistors are chosen.
-  Ratio is `(R1 + R2) / R2` where R1 is the battery-side leg and R2 is the
-  ground-side leg. Size it so `Vbat_max / ratio` stays comfortably under the
-  5V ADC reference.
-- **`ACS709_ZERO_CURRENT_VOLTS`** / **`ACS709_SENSITIVITY_V_PER_A`** — depend
-  on the ACS709 variant and its SEL pin wiring; measure both against a known
-  load.
-- **`BATTERY_CELLS_SERIES`** — set to `1` if the two 18650s are wired in
-  parallel (typical for these boost-converter UPS boards, single-cell voltage
-  range ~3.0-4.2V) or `2` if wired in series.
+- **`VOLTAGE_DIVIDER_RATIO`** — the divider is 33k (battery-side, R1) over
+  100k (ground-side, R2), so ratio = `(33k + 100k) / 100k` = `1.33`. At the
+  pack's 4.2V full point that's ~3.16V at the ADC pin, comfortably under the
+  5V reference.
+- **`BATTERY_CELLS_SERIES`** — `1`: the two 18650s are wired in parallel, so
+  the ADC sees single-cell voltage directly (confirmed full at 4.20V, empty
+  at 3.10V — the UPS board's low-voltage cutoff).
+- **`ACS709_ZERO_CURRENT_VOLTS`** / **`ACS709_SENSITIVITY_V_PER_A`** — still
+  need measuring against a known load; these depend on the ACS709 variant and
+  its SEL pin wiring.
 
 The state-of-charge percentage (to hundredths precision) comes from linear
-interpolation over a typical 1S Li-ion discharge curve in `BatteryCurve.cpp`;
-recalibrate that table against your actual cells if precision at low
-discharge rates matters.
+interpolation over a Li-ion discharge curve in `BatteryCurve.cpp`, with its
+tail pinned to this pack's actual 4.20V full / 3.10V empty points.
 
 ### ADC precision
 
