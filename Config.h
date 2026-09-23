@@ -37,10 +37,22 @@
 // ---------------------------------------------------------------------------
 // ACS709 current sensor calibration
 // Output is ratiometric: VIOUT = Vcc/2 at zero current, with a sensitivity
-// (mV per A) set by the module's SEL pin/version. Recalibrate both constants
-// against a known load before trusting the current reading.
+// (mV per A) set by the module's SEL pin/version. ACS709_ZERO_CURRENT_VOLTS
+// below is bench-measured (VIOUT at rest); ACS709_SENSITIVITY_V_PER_A is
+// still the ACS709's nominal 35A-range figure.
+//
+// IMPORTANT: bench testing found actual pack current is only ~33uA-13mA
+// (Pi + display load), while the ACS709 is a tens-of-amps Hall sensor --
+// at 66 mV/A, that 13mA swing is a ~0.86mV signal, smaller than a single
+// ADC count (~1.22mV, see oversampling note above) even before accounting
+// for the sensor's own output noise. No amount of constant-tuning fixes
+// this: the readings will stay dominated by noise/offset error (which is
+// why early testing showed a near-constant ~12.6A regardless of actual
+// load). For real mA-scale precision here, swap in a shunt-based sensor
+// sized for this range (e.g. INA219/INA226, I2C, low milliohm shunt) --
+// the ACS709 is the wrong tool for a load this small.
 // ---------------------------------------------------------------------------
-#define ACS709_ZERO_CURRENT_VOLTS    2.50
+#define ACS709_ZERO_CURRENT_VOLTS    2.49   // bench-measured VIOUT at rest
 #define ACS709_SENSITIVITY_V_PER_A   0.066   // e.g. 66 mV/A, 35A range, SEL=high
 
 // ---------------------------------------------------------------------------
@@ -50,13 +62,19 @@
 // (R1) / 100k bottom (R2) -> ratio = (33k + 100k) / 100k = 1.33. At the
 // pack's 4.2V full point that puts Vadc at ~3.16V, comfortably under the 5V
 // ADC reference.
+//
+// NOTE: bench testing found the divider's battery-side leg had been shorted
+// to the UPS board's 5V supply-out rail instead of the raw battery+ line,
+// which is what made the pack look permanently "full"/series-doubled. Fix
+// is physical: wire battery+ straight to the divider, bypassing the toggle
+// switch. The ratio math itself was already correct.
 // ---------------------------------------------------------------------------
 #define VOLTAGE_DIVIDER_RATIO   1.33
 
 // ---------------------------------------------------------------------------
 // Battery pack
 // Two 18650s wired in parallel (confirmed): single-cell voltage range, full
-// at 4.20V and empty at 3.10V (the UPS board's cutoff) -- see BatteryCurve.cpp.
+// at 4.20V and empty at 3.30V (the UPS board's cutoff) -- see BatteryCurve.cpp.
 // BATTERY_CELLS_SERIES divides Vbat down to a per-cell voltage before it's
 // run through the SOC curve; set to 2 if the pack is ever rewired in series.
 // ---------------------------------------------------------------------------

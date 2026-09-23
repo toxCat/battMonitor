@@ -43,17 +43,39 @@ Dependencies (install via the Arduino Library Manager):
 - **`VOLTAGE_DIVIDER_RATIO`** — the divider is 33k (battery-side, R1) over
   100k (ground-side, R2), so ratio = `(33k + 100k) / 100k` = `1.33`. At the
   pack's 4.2V full point that's ~3.16V at the ADC pin, comfortably under the
-  5V reference.
+  5V reference. Bench testing found the divider's battery-side leg had
+  actually been shorted to the UPS board's 5V supply-out rail rather than
+  the raw battery+ line, which made the pack read as if permanently full
+  (the ratio math itself was fine). Fix is physical: wire battery+ straight
+  to the divider, bypassing the toggle switch.
 - **`BATTERY_CELLS_SERIES`** — `1`: the two 18650s are wired in parallel, so
   the ADC sees single-cell voltage directly (confirmed full at 4.20V, empty
-  at 3.10V — the UPS board's low-voltage cutoff).
-- **`ACS709_ZERO_CURRENT_VOLTS`** / **`ACS709_SENSITIVITY_V_PER_A`** — still
-  need measuring against a known load; these depend on the ACS709 variant and
-  its SEL pin wiring.
+  at 3.30V — the UPS board's low-voltage cutoff).
+- **`ACS709_ZERO_CURRENT_VOLTS`** — bench-measured at `2.49V` (VIOUT at
+  rest). **`ACS709_SENSITIVITY_V_PER_A`** is still the ACS709's nominal
+  35A-range figure (66 mV/A) and, per the note below, isn't really fixable
+  by tuning alone.
 
 The state-of-charge percentage (to hundredths precision) comes from linear
 interpolation over a Li-ion discharge curve in `BatteryCurve.cpp`, with its
-tail pinned to this pack's actual 4.20V full / 3.10V empty points.
+tail pinned to this pack's actual 4.20V full / 3.30V empty points.
+
+### The ACS709 is the wrong sensor for this load
+
+Bench testing (multimeter in series with the toggle switch) found the actual
+system draw is only **~33uA (Pi disconnected) to ~13mA (Pi + display on)** —
+milliamps, not amps. The ACS709 is a Hall-effect sensor built for tens of
+amps; at its 66 mV/A sensitivity, a 13mA swing is a ~0.86mV signal, which is
+smaller than a single ADC count (~1.22mV, see oversampling note below) even
+before accounting for the sensor's own output noise. That mismatch — not a
+bad constant — is why early testing showed a current reading (~12.65A) that
+barely moved regardless of the actual load: it was reading noise/offset
+error amplified by a sensitivity meant for a signal three orders of
+magnitude larger. No amount of retuning `ACS709_ZERO_CURRENT_VOLTS` /
+`ACS709_SENSITIVITY_V_PER_A` fixes this. For real precision at this load,
+swap the ACS709 for a shunt-based sensor sized for mA-scale currents (e.g.
+an INA219 or INA226 breakout — I2C, so it could share the existing OLED
+bus).
 
 ### ADC precision
 
