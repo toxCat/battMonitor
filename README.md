@@ -51,16 +51,15 @@ Dependencies (install via the Arduino Library Manager):
 - **`BATTERY_CELLS_SERIES`** — `1`: the two 18650s are wired in parallel, so
   the ADC sees single-cell voltage directly (confirmed full at 4.20V, empty
   at 3.30V — the UPS board's low-voltage cutoff).
-- **`ACS709_ZERO_CURRENT_VOLTS`** — bench-measured at `2.49V` (VIOUT at
-  rest). **`ACS709_SENSITIVITY_V_PER_A`** is still the ACS709's nominal
-  35A-range figure (66 mV/A) and, per the note below, isn't really fixable
-  by tuning alone.
+- **`ACS709_ZERO_CURRENT_VOLTS`** / **`ACS709_SENSITIVITY_V_PER_A`** — kept
+  for reference (bench-measured zero point `2.49V`) but unused while current
+  sensing is shelved, see below.
 
 The state-of-charge percentage (to hundredths precision) comes from linear
 interpolation over a Li-ion discharge curve in `BatteryCurve.cpp`, with its
 tail pinned to this pack's actual 4.20V full / 3.30V empty points.
 
-### The ACS709 is the wrong sensor for this load
+### Current sensing is shelved
 
 Bench testing (multimeter in series with the toggle switch) found the actual
 system draw is only **~33uA (Pi disconnected) to ~13mA (Pi + display on)** —
@@ -72,10 +71,11 @@ bad constant — is why early testing showed a current reading (~12.65A) that
 barely moved regardless of the actual load: it was reading noise/offset
 error amplified by a sensitivity meant for a signal three orders of
 magnitude larger. No amount of retuning `ACS709_ZERO_CURRENT_VOLTS` /
-`ACS709_SENSITIVITY_V_PER_A` fixes this. For real precision at this load,
-swap the ACS709 for a shunt-based sensor sized for mA-scale currents (e.g.
+`ACS709_SENSITIVITY_V_PER_A` fixes this, so it's parked behind
+`ENABLE_CURRENT_SENSING` (`Config.h`, currently `0`) rather than shown on
+screen. Revisit with a shunt-based sensor sized for mA-scale currents (e.g.
 an INA219 or INA226 breakout — I2C, so it could share the existing OLED
-bus).
+bus), then flip the flag back on.
 
 ### ADC precision
 
@@ -91,13 +91,14 @@ The display is a small state machine, checked every `DISPLAY_UPDATE_MS`:
 
 | State | Condition                                              | Shows                                  |
 |-------|---------------------------------------------------------|-----------------------------------------|
-| 0 — Discharging  | not charging, not full, SOC ≥ `LOW_BATTERY_PERCENT` | Voltage, SOC%, current draw (3 lines)    |
+| 0 — Discharging  | not charging, not full, SOC ≥ `LOW_BATTERY_PERCENT` | Voltage, SOC% (both large, 2 lines)      |
 | 1 — Charging     | `PIN_CHARGING` HIGH and not full                     | SOC% (large) and "USB-C"                 |
 | 2 — Full/Charged | `PIN_CHARGE_FULL` HIGH                               | "CHARGED"                                 |
 | 3 — Low battery  | not charging, not full, SOC < `LOW_BATTERY_PERCENT`  | Blinking "LOW BATTERY"                    |
 
 State 2 (full) takes priority over state 1 (charging) if both pins are
-somehow HIGH at once; state 3 only applies while actually discharging.
+somehow HIGH at once; state 3 only applies while actually discharging. All
+states now use the same large (text size 2) centered style.
 
 ### Boot splash
 

@@ -35,23 +35,17 @@
 #define ADC_EFFECTIVE_COUNTS    (1024UL << ADC_EXTRA_BITS)           // 4096
 
 // ---------------------------------------------------------------------------
-// ACS709 current sensor calibration
-// Output is ratiometric: VIOUT = Vcc/2 at zero current, with a sensitivity
-// (mV per A) set by the module's SEL pin/version. ACS709_ZERO_CURRENT_VOLTS
-// below is bench-measured (VIOUT at rest); ACS709_SENSITIVITY_V_PER_A is
-// still the ACS709's nominal 35A-range figure.
-//
-// IMPORTANT: bench testing found actual pack current is only ~33uA-13mA
-// (Pi + display load), while the ACS709 is a tens-of-amps Hall sensor --
-// at 66 mV/A, that 13mA swing is a ~0.86mV signal, smaller than a single
-// ADC count (~1.22mV, see oversampling note above) even before accounting
-// for the sensor's own output noise. No amount of constant-tuning fixes
-// this: the readings will stay dominated by noise/offset error (which is
-// why early testing showed a near-constant ~12.6A regardless of actual
-// load). For real mA-scale precision here, swap in a shunt-based sensor
-// sized for this range (e.g. INA219/INA226, I2C, low milliohm shunt) --
-// the ACS709 is the wrong tool for a load this small.
+// Current sensing -- SHELVED
+// The ACS709 is the wrong sensor for this load: bench testing found actual
+// pack current is only ~33uA-13mA (Pi + display), three orders of magnitude
+// below the ACS709's amp-scale range, so its readings are dominated by
+// noise/offset error no matter how ACS709_ZERO_CURRENT_VOLTS /
+// ACS709_SENSITIVITY_V_PER_A are tuned. Parked behind this flag until a
+// shunt-based sensor sized for mA-scale currents (e.g. INA219/INA226)
+// replaces it -- flip to 1 to bring the current reading back on screen.
 // ---------------------------------------------------------------------------
+#define ENABLE_CURRENT_SENSING       0
+
 #define ACS709_ZERO_CURRENT_VOLTS    2.49   // bench-measured VIOUT at rest
 #define ACS709_SENSITIVITY_V_PER_A   0.066   // e.g. 66 mV/A, 35A range, SEL=high
 

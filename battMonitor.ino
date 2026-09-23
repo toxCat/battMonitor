@@ -1,8 +1,8 @@
 // Battery charge/current monitor for a Raspberry Pi portable case.
 // Target: Arduino Micro driving a 0.91" SSD1306 OLED (I2C), reading pack
-// current from a Pololu ACS709 board (A0) and pack voltage from a resistor
-// divider (A1), with two digital inputs reporting charger status from the
-// UPS board.
+// voltage from a resistor divider (A1), with two digital inputs reporting
+// charger status from the UPS board. Current sensing (Pololu ACS709, A0) is
+// shelved -- see ENABLE_CURRENT_SENSING in Config.h.
 //
 // Dependencies (install via Arduino Library Manager):
 //   - Adafruit GFX Library
@@ -58,6 +58,7 @@ static float readBatteryVoltage() {
   return readAveragedVolts(PIN_BATTERY_VOLTAGE) * VOLTAGE_DIVIDER_RATIO;
 }
 
+#if ENABLE_CURRENT_SENSING
 // Positive = discharging, negative = charging (sign depends on ACS709
 // current-flow orientation as wired; flip ACS709_ZERO_CURRENT_VOLTS/polarity
 // during calibration if this comes out backwards).
@@ -65,6 +66,7 @@ static float readCurrentAmps() {
   float vOut = readAveragedVolts(PIN_CURRENT_SENSE);
   return (vOut - ACS709_ZERO_CURRENT_VOLTS) / ACS709_SENSITIVITY_V_PER_A;
 }
+#endif
 
 static DisplayState determineState(bool isCharging, bool isFull, float socPercent) {
   if (isFull) {
@@ -98,21 +100,14 @@ static void printCentered(const char *text, int16_t y, uint8_t size) {
   display.print(text);
 }
 
-static void renderDischarging(float voltage, float socPercent, float currentAmps) {
+static void renderDischarging(float voltage, float socPercent) {
   char buf[16];
-  display.setTextSize(1);
 
   formatValue(voltage, 2, "V", buf, sizeof(buf));
-  display.setCursor(0, 0);
-  display.print(buf);
+  printCentered(buf, 0, 2);
 
   formatValue(socPercent, 2, "%", buf, sizeof(buf));
-  display.setCursor(0, 11);
-  display.print(buf);
-
-  formatValue(fabs(currentAmps), 3, "A", buf, sizeof(buf));
-  display.setCursor(0, 22);
-  display.print(buf);
+  printCentered(buf, 16, 2);
 }
 
 static void renderCharging(float socPercent) {
@@ -136,7 +131,6 @@ static void renderLowBattery(bool blinkOn) {
 
 void loop() {
   float batteryVoltage = readBatteryVoltage();
-  float currentAmps = readCurrentAmps();
   float socPercent = voltageToPercent(batteryVoltage / BATTERY_CELLS_SERIES);
 
   bool isCharging = digitalRead(PIN_CHARGING) == HIGH;
@@ -158,7 +152,7 @@ void loop() {
       break;
     case STATE_DISCHARGING:
     default:
-      renderDischarging(batteryVoltage, socPercent, currentAmps);
+      renderDischarging(batteryVoltage, socPercent);
       break;
   }
 
