@@ -79,11 +79,23 @@ bus), then flip the flag back on.
 
 ### ADC precision
 
-Both analog channels are read with oversampling-and-decimation (Atmel AVR121):
-16 raw 10-bit samples are summed and shifted down to yield 2 extra effective
-bits (~1.22 mV/count at the pin), so the displayed voltage/current stay
-meaningful to the hundredths place even after divider scaling. Tune
-`ADC_EXTRA_BITS` in `Config.h` if you want more/less oversampling.
+The (shelved) current-sensing path uses oversampling-and-decimation (Atmel
+AVR121): 16 raw 10-bit samples summed and shifted down for 2 extra effective
+bits (~1.22 mV/count). That technique bursts all 16 samples within ~2ms of
+each other, which turned out to be the wrong tool for the battery voltage
+reading: bench testing found a slow (~1-2Hz) ripple on the battery rail —
+likely the UPS board's boost converter pulse-skipping at this system's very
+light load (tens of uA to low mA) — and a burst that fast lands on the same
+ripple phase every time, so it never averages out no matter how many samples
+are taken. A 0.1uF filter cap at the ADC pin didn't help either, confirming
+the ripple is well below that cap's ~64Hz cutoff.
+
+Voltage instead takes **one ADC sample per `loop()` call**, folded into a
+rolling average over the last `VOLTAGE_SAMPLE_COUNT` calls (`Config.h`,
+default 16) — spreading the averaging window across
+`VOLTAGE_SAMPLE_COUNT * DISPLAY_UPDATE_MS` of real time (~8s at the
+defaults), long enough to cover many ripple cycles instead of a single
+frozen instant of one.
 
 ### Display states
 

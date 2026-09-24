@@ -22,17 +22,33 @@
 #define PIN_CHARGE_FULL     7   // HIGH once the UPS board reports full charge
 
 // ---------------------------------------------------------------------------
-// ADC oversampling
+// ADC oversampling (burst) -- used only by the shelved current-sensing path.
 // Standard oversample-and-decimate technique (Atmel AVR121): summing
 // 4^ADC_EXTRA_BITS raw 10-bit samples and shifting right by ADC_EXTRA_BITS
 // yields ADC_EXTRA_BITS additional effective bits of resolution. With 2 extra
-// bits that's 12-bit effective resolution, ~1.22 mV/count at the pin -- well
-// under a hundredth of a volt even after divider scaling.
+// bits that's 12-bit effective resolution, ~1.22 mV/count at the pin.
+//
+// NOT used for the battery voltage reading -- see VOLTAGE_SAMPLE_COUNT below.
+// All 16 samples in a burst like this land within ~2ms of each other, so a
+// slow ripple (bench testing found one with a period close to our own loop
+// cadence, likely the UPS board's boost converter pulse-skipping at this
+// system's very light load) lands on the same phase every time and never
+// averages out, no matter how many burst samples are taken.
 // ---------------------------------------------------------------------------
 #define ADC_REFERENCE_VOLTS     5.0
 #define ADC_EXTRA_BITS          2
 #define ADC_OVERSAMPLE_SAMPLES  (1UL << (2 * ADC_EXTRA_BITS))        // 16
 #define ADC_EFFECTIVE_COUNTS    (1024UL << ADC_EXTRA_BITS)           // 4096
+
+// ---------------------------------------------------------------------------
+// Battery voltage rolling average
+// One ADC sample is taken per loop() call and fed into a rolling average
+// over the last VOLTAGE_SAMPLE_COUNT loops, spreading the averaging window
+// across VOLTAGE_SAMPLE_COUNT * DISPLAY_UPDATE_MS of real time (~8s at the
+// defaults below) instead of a few ms -- long enough to span many cycles of
+// the slow ripple a tight burst can't filter.
+// ---------------------------------------------------------------------------
+#define VOLTAGE_SAMPLE_COUNT    16
 
 // ---------------------------------------------------------------------------
 // Current sensing -- SHELVED

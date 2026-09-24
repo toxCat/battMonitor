@@ -43,6 +43,7 @@ void setup() {
   drawSplash();
 }
 
+#if ENABLE_CURRENT_SENSING
 // Oversamples and decimates ADC_OVERSAMPLE_SAMPLES raw readings to gain
 // ADC_EXTRA_BITS of effective resolution (see Config.h), returning volts.
 static float readAveragedVolts(uint8_t pin) {
@@ -53,9 +54,30 @@ static float readAveragedVolts(uint8_t pin) {
   uint32_t oversampled = sum >> ADC_EXTRA_BITS;
   return (float)oversampled * (ADC_REFERENCE_VOLTS / (float)ADC_EFFECTIVE_COUNTS);
 }
+#endif
+
+// One raw sample per call, folded into a rolling average spread across
+// VOLTAGE_SAMPLE_COUNT calls (i.e. VOLTAGE_SAMPLE_COUNT loop() iterations)
+// -- see the Config.h note on why a fast burst can't filter this system's
+// slow supply ripple.
+static uint16_t voltageSamples[VOLTAGE_SAMPLE_COUNT];
+static uint8_t voltageSampleIndex = 0;
+static uint32_t voltageSampleSum = 0;
+static uint8_t voltageSampleCount = 0;
 
 static float readBatteryVoltage() {
-  return readAveragedVolts(PIN_BATTERY_VOLTAGE) * VOLTAGE_DIVIDER_RATIO;
+  uint16_t newSample = analogRead(PIN_BATTERY_VOLTAGE);
+  voltageSampleSum -= voltageSamples[voltageSampleIndex];
+  voltageSamples[voltageSampleIndex] = newSample;
+  voltageSampleSum += newSample;
+  voltageSampleIndex = (voltageSampleIndex + 1) % VOLTAGE_SAMPLE_COUNT;
+  if (voltageSampleCount < VOLTAGE_SAMPLE_COUNT) {
+    voltageSampleCount++;
+  }
+
+  float avgCounts = (float)voltageSampleSum / voltageSampleCount;
+  float vAdc = avgCounts * (ADC_REFERENCE_VOLTS / 1024.0);
+  return vAdc * VOLTAGE_DIVIDER_RATIO;
 }
 
 #if ENABLE_CURRENT_SENSING
